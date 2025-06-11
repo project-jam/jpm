@@ -44,8 +44,9 @@ int main(int argc, char* argv[]) {
     }
 
     if (args.empty()) {
-        std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]" << std::endl;
-        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>" << std::endl;
+        std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]\\n";
+        std::cerr << "       jpm [-v|--verbose] <js_file> [args...]\\n";
+        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>\n"; // Restored run command usage
         return 1;
     }
 
@@ -63,23 +64,46 @@ int main(int argc, char* argv[]) {
         }
         jpm::InstallCommand install_command;
         install_command.execute(command_args);
-    } else if (command == "run") {
+    } else if (command == "run") { // Handle the explicit 'run' command
         if (command_args.empty()) {
             std::cerr << "Usage: jpm [-v|--verbose] run <js_file>" << std::endl;
             std::cerr << "Please specify a JavaScript file to run." << std::endl;
             return 1;
         }
+#ifdef USE_JAVASCRIPTCORE
         jpm::JSCommand js_command;
-        js_command.execute(command_args);
+        js_command.execute({command_args[0]}); // Pass the first argument as the file path
+        // Note: Any args after the file path are currently ignored by JSCommand::execute.
+        // This might need adjustment if you need to pass arguments to the JS script.
+#else
+        std::cerr << "Error: JavaScriptCore support is not enabled in this build." << std::endl;
+        return 1;
+#endif
+    } else if (command.size() >= 3 && command.substr(command.size() - 3) == ".js") {
+        // Handle direct .js file execution
+#ifdef USE_JAVASCRIPTCORE
+        if (g_verbose_output) {
+            std::cout << "Detected .js file argument. Running script: " << command << std::endl;
+        }
+        jpm::JSCommand js_command;
+        js_command.execute({command}); // Pass the .js file path as the argument
+        // Note: Any args after the file path are currently ignored by JSCommand::execute.
+        // This might need adjustment if you need to pass arguments to the JS script.
+#else
+        std::cerr << "Error: JavaScriptCore support is not enabled in this build." << std::endl;
+        return 1;
+#endif
     } else {
+        // Unknown command
         if (g_verbose_output) {
             std::cout << "jpm (Jam Package Manager) - Verbose Mode" << std::endl;
         } else {
             std::cout << "jpm (Jam Package Manager)" << std::endl;
         }
-        std::cerr << "Unknown command: " << command << std::endl;
-        std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]" << std::endl;
-        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>" << std::endl;
+        std::cerr << "Unknown command or file: " << command << std::endl;
+        std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]\\n";
+        std::cerr << "       jpm [-v|--verbose] <js_file> [args...]\\n";
+        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>\n"; // Restored run command usage
         return 1;
     }
 
