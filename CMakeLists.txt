@@ -59,13 +59,13 @@ set(JPM_MAIN_SOURCES
 
 set(JPM_COMMANDS_SOURCES
     src/commands/install.cpp
-    # js_command.cpp will be added conditionally below
+    # js.cpp will be added conditionally below
 )
 
-# Include js_command.cpp only if JSCore embedding is enabled
+# Include js.cpp only if JSCore embedding is enabled
 if(USE_JAVASCRIPTCORE)
     list(APPEND JPM_COMMANDS_SOURCES
-         src/commands/js_command.cpp
+         src/js/js.cpp
     )
     # Define macro so code sees USE_JAVASCRIPTCORE
     add_definitions(-DUSE_JAVASCRIPTCORE)

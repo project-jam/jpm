@@ -3,7 +3,7 @@
 #include <string>
 #include <algorithm> // For std::remove
 #include "commands/install.h"
-#include "commands/js_command.h" // Include the new JSCommand header
+#include "js/js.h" // Include the new JSCommand header
 #include "jpm_config.h"      // For g_verbose_output
 
 // Define the global verbosity flag
