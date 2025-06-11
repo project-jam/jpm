@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm> // For std::remove
 #include "commands/install.h"
+#include "commands/js_command.h" // Include the new JSCommand header
 #include "jpm_config.h"      // For g_verbose_output
 
 // Define the global verbosity flag
@@ -32,9 +33,19 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Check for version flag and print version if present
+    auto version_it = std::find_if(args.begin(), args.end(), [](const std::string& s) {
+        return s == "--version";
+    });
+
+    if (version_it != args.end()) {
+        std::cout << "jpm version " << PROJECT_VERSION << std::endl;
+        return 0;
+    }
+
     if (args.empty()) {
         std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]" << std::endl;
-        std::cerr << "Available commands:\n  install <package_name>[@<version>]..." << std::endl;
+        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>" << std::endl;
         return 1;
     }
 
@@ -52,6 +63,14 @@ int main(int argc, char* argv[]) {
         }
         jpm::InstallCommand install_command;
         install_command.execute(command_args);
+    } else if (command == "run") {
+        if (command_args.empty()) {
+            std::cerr << "Usage: jpm [-v|--verbose] run <js_file>" << std::endl;
+            std::cerr << "Please specify a JavaScript file to run." << std::endl;
+            return 1;
+        }
+        jpm::JSCommand js_command;
+        js_command.execute(command_args);
     } else {
         if (g_verbose_output) {
             std::cout << "jpm (Jam Package Manager) - Verbose Mode" << std::endl;
@@ -60,7 +79,7 @@ int main(int argc, char* argv[]) {
         }
         std::cerr << "Unknown command: " << command << std::endl;
         std::cerr << "Usage: jpm [-v|--verbose] <command> [args...]" << std::endl;
-        std::cerr << "Available commands:\n  install <package_name>[@<version>]..." << std::endl;
+        std::cerr << "Available commands:\n  install <package_name>[@<version>]...\n  run <js_file>" << std::endl;
         return 1;
     }
 
