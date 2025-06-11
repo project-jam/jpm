@@ -1,85 +1,130 @@
+// src/network/http_client.cpp
 #include "network/http_client.h"
 #include "jpm_config.h"
-#include <iostream>
+
+#include <curl/curl.h>
 #include <fstream>
-#include <cstdio>
+#include <iostream>
+#include <optional>
+#include <sstream>
+#include <string>
 #include <sys/stat.h>
-#include <cpr/cpr.h>
+
+namespace {
+
+/*========  helpers  ========*/
+size_t write_to_string(void* contents, size_t size, size_t nmemb, void* userp)
+{
+    const std::size_t realSize = size * nmemb;
+    auto* target = static_cast<std::string*>(userp);
+    target->append(static_cast<char*>(contents), realSize);
+    return realSize;
+}
+
+size_t write_to_stream(void* contents, size_t size, size_t nmemb, void* userp)
+{
+    const std::size_t realSize = size * nmemb;
+    auto* out = static_cast<std::ostream*>(userp);
+    out->write(static_cast<char*>(contents), realSize);
+    return out->good() ? realSize : 0;        // abort transfer if write fails
+}
+
+} // namespace
 
 namespace jpm {
 
-HttpClient::HttpClient() {
-    if (g_verbose_output) {
-        std::cout << "HttpClient initialized." << std::endl;
-    }
+HttpClient::HttpClient()
+{
+    if (g_verbose_output)
+        std::cout << "HttpClient initialized (libcurl backend)." << std::endl;
+    curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
-std::optional<std::string> HttpClient::get(const std::string& url) {
-    if (g_verbose_output) {
-        std::cout << "HttpClient::get attempting to fetch URL: " << url << std::endl;
-    }
-    cpr::Response r = cpr::Get(cpr::Url{url});
+HttpClient::~HttpClient() { curl_global_cleanup(); }
 
-    if (r.status_code == 200) {
-        if (g_verbose_output) {
-            std::cout << "HttpClient::get successfully fetched URL: " << url << " with status: " << r.status_code << std::endl;
-        }
-        return r.text;
-    } else if (r.error) {
-        std::cerr << "HttpClient::get CPR error for URL " << url << ": " << r.error.message << std::endl;
-        return std::nullopt;
-    } else {
-        std::cerr << "HttpClient::get failed to fetch URL: " << url << " - Status code: " << r.status_code << std::endl;
-        if (!r.text.empty()) {
-            std::cerr << "Response body (partial or error): " << r.text << std::endl;
-        }
+/*---------------------------------------------------------
+ | GET (returns body or std::nullopt on failure)
+ *--------------------------------------------------------*/
+std::optional<std::string> HttpClient::get(const std::string& url)
+{
+    if (g_verbose_output)
+        std::cout << "HttpClient::get fetching " << url << std::endl;
+
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::cerr << "curl_easy_init() failed" << std::endl;
         return std::nullopt;
     }
+
+    std::string buffer;
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_string);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // follow redirects
+
+    CURLcode res           = curl_easy_perform(curl);
+    long      status_code  = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+
+    curl_easy_cleanup(curl);
+
+    if (res == CURLE_OK && status_code == 200) {
+        if (g_verbose_output)
+            std::cout << "  Success (" << status_code << ")" << std::endl;
+        return buffer;
+    }
+
+    std::cerr << "HttpClient::get failed (" << res << ", status " << status_code
+              << "): " << curl_easy_strerror(res) << std::endl;
+    return std::nullopt;
 }
 
-bool HttpClient::download_file(const std::string& url, const std::string& output_path) {
-    if (g_verbose_output) {
-        std::cout << "HttpClient::download_file attempting to download URL: " << url << " to Path: " << output_path << std::endl;
-    }
+/*---------------------------------------------------------
+ | download_file (returns true on success)
+ *--------------------------------------------------------*/
+bool HttpClient::download_file(const std::string& url, const std::string& output_path)
+{
+    if (g_verbose_output)
+        std::cout << "HttpClient::download_file " << url << " → " << output_path
+                  << std::endl;
 
-    std::ofstream out_file(output_path, std::ios::binary);
-    if (!out_file) {
-        std::cerr << "HttpClient::download_file error: Could not open file for writing: " << output_path << std::endl;
+    std::ofstream out(output_path, std::ios::binary);
+    if (!out) {
+        std::cerr << "  Cannot open " << output_path << " for writing.\n";
         return false;
     }
 
-    cpr::Response r = cpr::Download(out_file, cpr::Url{url});
-    out_file.close();
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        std::cerr << "curl_easy_init() failed" << std::endl;
+        return false;
+    }
 
-    if (r.status_code == 200 && !r.error) {
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_stream);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &out);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+
+    CURLcode res          = curl_easy_perform(curl);
+    long     status_code  = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+
+    curl_easy_cleanup(curl);
+    out.close();
+
+    if (res == CURLE_OK && status_code == 200) {
         if (g_verbose_output) {
-            std::cout << "HttpClient::download_file successfully downloaded " << url << " to " << output_path << std::endl;
-            struct stat stat_buf;
-            if (stat(output_path.c_str(), &stat_buf) == 0) {
-                std::cout << "  Downloaded file size: " << stat_buf.st_size << " bytes." << std::endl;
-                if (stat_buf.st_size == 0 && r.downloaded_bytes == 0) {
-                    auto it_cl = r.header.find("content-length");
-                    if (it_cl != r.header.end() && !it_cl->second.empty() && std::stoi(it_cl->second) > 0) {
-                        std::cerr << "  Warning: Downloaded file is 0 bytes but Content-Length header was > 0." << std::endl;
-                    }
-                }
-            } else {
-                std::cerr << "  Warning: Could not stat downloaded file: " << output_path << std::endl;
-            }
+            struct stat st {};
+            if (stat(output_path.c_str(), &st) == 0)
+                std::cout << "  Downloaded " << st.st_size << " bytes.\n";
         }
         return true;
-    } else if (r.error) {
-        std::cerr << "HttpClient::download_file CPR error for URL " << url << ": " << r.error.message << std::endl;
-        remove(output_path.c_str());
-        return false;
-    } else {
-        std::cerr << "HttpClient::download_file failed for URL " << url << " - Status code: " << r.status_code << std::endl;
-        if (!r.text.empty()) {
-            std::cerr << "  Response/Error details: " << r.text << std::endl;
-        }
-        remove(output_path.c_str());
-        return false;
     }
+
+    std::cerr << "HttpClient::download_file failed (" << res << ", status "
+              << status_code << "): " << curl_easy_strerror(res) << std::endl;
+    std::remove(output_path.c_str());
+    return false;
 }
 
 } // namespace jpm

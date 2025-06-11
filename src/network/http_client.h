@@ -9,6 +9,7 @@ namespace jpm {
 class HttpClient {
 public:
     HttpClient();
+    ~HttpClient();
 
     // Returns the body of the response as a string
     // Returns std::nullopt on error
