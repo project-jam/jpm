@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 #include <algorithm> // For std::remove
-#include "commands/install.h"
+#include "install/install.h"
 #include "js/js.h" // Include the new JSCommand header
 #include "jpm_config.h"      // For g_verbose_output
 

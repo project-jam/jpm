@@ -58,7 +58,7 @@ set(JPM_MAIN_SOURCES
 )
 
 set(JPM_COMMANDS_SOURCES
-    src/commands/install.cpp
+    src/install/install.cpp
     # js.cpp will be added conditionally below
 )
 
@@ -66,6 +66,15 @@ set(JPM_COMMANDS_SOURCES
 if(USE_JAVASCRIPTCORE)
     list(APPEND JPM_COMMANDS_SOURCES
          src/js/js.cpp
+         src/js/process/argv.cpp
+         src/js/process/exit.cpp
+         src/js/process/stdout.cpp
+         src/js/process/stderr.cpp
+         src/js/process/stdin.cpp
+         src/js/process/env.cpp
+         src/js/process/events.cpp
+         src/js/process/platform.cpp
+         src/js/module.cpp
     )
     # Define macro so code sees USE_JAVASCRIPTCORE
     add_definitions(-DUSE_JAVASCRIPTCORE)

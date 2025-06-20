@@ -1,4 +1,4 @@
-#include "commands/install.h"
+#include "install/install.h"
 #include "package/package_spec.h"
 #include "package/dependency_resolver.h"
 #include "utils/file_utils.h"
